@@ -486,7 +486,9 @@ nav {
   .hero h1 { font-size: 2.2rem; }
   .otp-inputs input { width: 34px; height: 40px; font-size: .9rem; gap: .3rem; }
   .otp-inputs { gap: .3rem; }
-  .game-nav-info .btn-sm:not(:first-child):not(:last-child) { display: none; }
+  .game-nav-info { flex-wrap: wrap; justify-content: flex-end; gap: .3rem; }
+  .game-nav-info .btn-sm { padding: .3rem .5rem; font-size: .65rem; display: inline-block !important; }
+  .balance-chip { width: 100%; text-align: center; }
 }
   background:var(--card2); border:1px solid var(--border); border-radius:8px;
   padding:.75rem; max-height:140px; overflow-y:auto;
@@ -910,19 +912,33 @@ function googleSignIn() {
   if (GOOGLE_CLIENT_ID.startsWith('YOUR')) {
     toast('Google Sign-In not configured yet. Use email signup for now.'); return;
   }
-  google.accounts.id.initialize({
+  const client = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    callback: handleGoogleResponse,
-    auto_select: false,
+    scope: 'email profile',
+    callback: (tokenResponse) => {
+      if (tokenResponse.access_token) {
+        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: 'Bearer ' + tokenResponse.access_token }
+        })
+        .then(r => r.json())
+        .then(payload => { handleGooglePayload(payload); });
+      }
+    },
   });
-  google.accounts.id.prompt();
+  client.requestAccessToken({ prompt: 'select_account' });
 }
+
+function handleGooglePayload(payload) { handleGoogleResponse({ _payload: payload }); }
 
 function handleGoogleResponse(response) {
   try {
-    // Decode JWT token from Google
-    const base64 = response.credential.split('.')[1];
-    const payload = JSON.parse(atob(base64));
+    let payload;
+    if (response._payload) {
+      payload = response._payload;
+    } else {
+      const base64 = response.credential.split('.')[1];
+      payload = JSON.parse(atob(base64));
+    }
     const { name, email, picture } = payload;
 
     const users = getUsers();
