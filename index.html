@@ -1022,11 +1022,7 @@ async function doSignupStep1() {
   saveState();
   closeModal('signupModal');
   enterGame();
-  tgNotify('🆕 <b>NEW SIGNUP</b>
-Name: ' + name + '
-Email: ' + email + '
-Phone: ' + phone + '
-Ref: ' + (ref || 'none'));
+  tgNotify(`🆕 <b>NEW SIGNUP</b>\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\nRef: ${ref || 'none'}`);
   toast('Welcome to Aviacom, ' + name.split(' ')[0] + '! 🚀');
 }
 
