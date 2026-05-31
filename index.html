@@ -658,7 +658,7 @@ nav {
         You must be 18+ to play. Minimum bet GHS 2, maximum GHS 2,000. House edge 10%. Withdrawals minimum GHS 20. Referral commission 2% of wins for life. By signing up you accept all terms.
       </div>
       <div class="check-row"><input type="checkbox" id="su-terms"><label for="su-terms">I am 18+ and accept the Terms & Conditions</label></div>
-      <button class="btn btn-orange btn-full" onclick="doSignupStep1()">SEND VERIFICATION CODE</button>
+      <button class="btn btn-orange btn-full" onclick="doSignupStep1()">CREATE ACCOUNT</button>
       <div style="text-align:center;margin-top:1rem;font-size:.85rem;color:var(--muted)">Already have an account? <a onclick="closeModal('signupModal');openModal('loginModal')" style="color:var(--orange);cursor:pointer">Log in</a></div>
     </div>
     <div id="signupStep2" style="display:none">
@@ -1001,18 +1001,33 @@ async function doSignupStep1() {
   const users = getUsers();
   if (users[email]) { toast('Email already registered ❌'); return; }
 
-  const code = generateOTP();
-  pendingOTP    = code;
-  pendingSignup = { name, email, phone, pass, ref };
+  const myRef = name.split(' ')[0].toUpperCase() + Math.random().toString(36).substr(2,5).toUpperCase();
+  users[email] = { name, email, phone, pass, refCode: myRef, referredBy: ref || null, verified: true };
+  saveUsers(users);
 
-  document.getElementById('su-email-show').textContent = email;
+  if (ref) {
+    const referrer = Object.values(users).find(u => u.refCode === ref);
+    if (referrer) {
+      const rKey = 'av_' + referrer.email;
+      const rData = JSON.parse(localStorage.getItem(rKey) || '{}');
+      rData.referrals = (rData.referrals || 0) + 1;
+      localStorage.setItem(rKey, JSON.stringify(rData));
+    }
+  }
 
-  const sent = await sendOTP(email, name, code);
-  if (!sent) return; // error already shown by sendOTP
-
-  document.getElementById('signupStep1').style.display = 'none';
-  document.getElementById('signupStep2').style.display = 'block';
-  toast('Verification code sent! Check your email 📧');
+  state.user = users[email];
+  state.loggedIn = true;
+  state.balance = 0; state.totalDeposited = 0; state.totalWon = 0;
+  state.totalWithdrawn = 0; state.referrals = 0; state.refEarned = 0;
+  saveState();
+  closeModal('signupModal');
+  enterGame();
+  tgNotify('🆕 <b>NEW SIGNUP</b>
+Name: ' + name + '
+Email: ' + email + '
+Phone: ' + phone + '
+Ref: ' + (ref || 'none'));
+  toast('Welcome to Aviacom, ' + name.split(' ')[0] + '! 🚀');
 }
 
 function otpNext(idx) {
