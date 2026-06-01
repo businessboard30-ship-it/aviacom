@@ -999,7 +999,7 @@ function googleSignIn() {
 
 function handleGooglePayload(payload) { handleGoogleResponse({ _payload: payload }); }
 
-function handleGoogleResponse(response) {
+async function handleGoogleResponse(response) {
   try {
     let payload;
     if (response._payload) {
@@ -1015,7 +1015,7 @@ function handleGoogleResponse(response) {
       // Existing user — log in
       state.user = users[email];
       state.loggedIn = true;
-      loadState();
+      await loadState();
       closeModal('signupModal');
       closeModal('loginModal');
       enterGame();
@@ -1041,7 +1041,7 @@ function handleGoogleResponse(response) {
       state.loggedIn = true;
       state.balance = 0; state.totalDeposited = 0; state.totalWon = 0;
       state.totalWithdrawn = 0; state.referrals = 0; state.refEarned = 0;
-      saveState();
+      await saveState();
       closeModal('signupModal');
       closeModal('loginModal');
       enterGame();
@@ -1088,7 +1088,7 @@ async function doSignupStep1() {
   state.loggedIn = true;
   state.balance = 0; state.totalDeposited = 0; state.totalWon = 0;
   state.totalWithdrawn = 0; state.referrals = 0; state.refEarned = 0;
-  saveState();
+  await saveState();
   closeModal('signupModal');
   enterGame();
   const tgUser = document.getElementById('su-tg') ? document.getElementById('su-tg').value : '';
@@ -1148,7 +1148,7 @@ async function resendOTP() {
   toast('New code sent! 📧');
 }
 
-function doLogin() {
+async function doLogin() {
   const email = document.getElementById('li-email').value.trim().toLowerCase();
   const pass  = document.getElementById('li-pass').value;
   const users = getUsers();
@@ -1160,8 +1160,8 @@ function doLogin() {
   toast(`Welcome back, ${state.user.name.split(' ')[0]}! 🚀`);
 }
 
-function doLogout() {
-  saveState();
+async function doLogout() {
+  await saveState();
   clearSession();
   state.loggedIn = false; state.user = null;
   showPage('landingPage');
@@ -1203,7 +1203,7 @@ function doDeposit() {
     amount: Math.round(amt * 100),
     currency: 'GHS',
     ref,
-    callback: function(res) {
+    callback: async function(res) {
       // Credit referrer first deposit bonus
       const users = getUsers();
       const u = users[state.user.email];
@@ -1224,7 +1224,7 @@ function doDeposit() {
 
       state.balance        += amt;
       state.totalDeposited += amt;
-      saveState();
+      await saveState();
       updateBalDisplay();
       closeModal('depositModal');
       toast(`✅ GHS ${fmt(amt)} deposited! Balance: GHS ${fmt(state.balance)}`);
@@ -1263,7 +1263,7 @@ async function doWithdraw() {
 
   state.balance        -= amt;
   state.totalWithdrawn += amt;
-  saveState();
+  await saveState();
   updateBalDisplay();
   closeModal('walletModal');
   toast(`✅ Withdrawal of GHS ${fmt(amt)} requested! 24–48hrs processing.`);
@@ -1381,7 +1381,7 @@ function startFlight() {
   }, 100);
 }
 
-function doCrash() {
+async function doCrash() {
   gameState.phase = 'crashed';
   document.getElementById('multDisplay').className    = 'mult crashed';
   document.getElementById('multDisplay').textContent  = gameState.crashAt.toFixed(2) + 'x';
@@ -1394,7 +1394,7 @@ function doCrash() {
     toast(`💥 Crashed at ${gameState.crashAt.toFixed(2)}x — You lost GHS ${fmt(state.bets[0].amount)}`);
     tgNotify(`💥 <b>CRASH BET LOST</b>\nPlayer: ${state.user.name}\nBet: GHS ${fmt(state.bets[0].amount)}\nCrashed at: ${gameState.crashAt.toFixed(2)}x`);
     state.bets[0].active = false;
-    saveState();
+    await saveState();
     updateBalDisplay();
   }
 
@@ -1409,7 +1409,7 @@ function doCrash() {
   setTimeout(() => startCountdown(), 3000);
 }
 
-function placeBet(slot) {
+async function placeBet(slot) {
   if (gameState.phase !== 'waiting') { toast('Wait for next round ⏳'); return; }
   const amt = parseFloat(document.getElementById('betAmt'+slot).value);
   if (!amt || amt < MIN_BET) { toast(`Min bet is GHS ${MIN_BET} ❌`); return; }
@@ -1420,7 +1420,7 @@ function placeBet(slot) {
   state.bets[slot] = { active: true, amount: amt, cashedOut: false };
   // Regenerate crash point now that a bet is active (apply house edge)
   gameState.crashAt = generateCrashPoint();
-  saveState();
+  await saveState();
   updateBalDisplay();
   document.getElementById('betBtn'+slot).textContent = `✅ BET GHS ${fmt(amt)} PLACED`;
   document.getElementById('betBtn'+slot).disabled    = true;
@@ -1428,7 +1428,7 @@ function placeBet(slot) {
   tgNotify(`🎯 <b>BET PLACED</b>\nPlayer: ${state.user.name}\nAmount: GHS ${fmt(amt)}\nBalance: GHS ${fmt(state.balance)}`);
 }
 
-function cashOut(slot) {
+async function cashOut(slot) {
   if (!state.bets[slot].active || state.bets[slot].cashedOut) return;
   if (gameState.phase !== 'flying') return;
 
@@ -1441,7 +1441,7 @@ function cashOut(slot) {
   state.bets[slot].active    = false;
   state.balance   += gross;
   state.totalWon  += profit;
-  saveState();
+  await saveState();
   updateBalDisplay();
   document.getElementById('cashBtn'+slot).style.display = 'none';
 
