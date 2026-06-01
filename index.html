@@ -6,6 +6,7 @@
 <title>AVIACOM — Rocket to Riches</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://js.paystack.co/v1/inline.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
   // Initialize EmailJS immediately when script loads
@@ -793,11 +794,15 @@ nav {
 // ══════════════════════════════════════════════════
 //  CONFIG — REPLACE THESE WITH YOUR OWN VALUES
 // ══════════════════════════════════════════════════
+const SUPABASE_URL  = "https://bjgtbhjogbqtyrmpqhnm.supabase.co";
+const SUPABASE_KEY  = "sb_publishable_TfT4M6Ttezj76PJJGhQ6mg_Oc26fJRB";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const PAYSTACK_KEY  = "pk_live_43a4e2c5203be6ae79d012694379691a2c129f89";
 const EMAILJS_SVC   = "service_pl4kshn";
 const EMAILJS_TPL   = "template_74chryr";
 const EMAILJS_KEY   = "u4u854Rh1Q9p5OY52";
-const TG_BOT_TOKEN  = "8805295472:AAEX198MM0mh4lTe4xdJ2vGB9Ml5B0XLYL8";
+const TG_BOT_TOKEN  = "8805295472:AAEVuE7BIRAA2TBK3eU213YtzFo9Gbop9N8";
 const TG_CHAT_ID    = "8162426062";
 const HOUSE_EDGE    = 0.10; // 10%
 const MIN_BET       = 2;
@@ -826,25 +831,73 @@ let gameState = {
 let pendingSignup = null;
 let pendingOTP    = null;
 
-// ══════════════════ STORAGE ══════════════════
+// ══════════════════ STORAGE (Supabase) ══════════════════
+// Keep localStorage as fallback
 const getUsers = () => JSON.parse(localStorage.getItem('av_users') || '{}');
 const saveUsers = u => localStorage.setItem('av_users', JSON.stringify(u));
-function loadState() {
-  const saved = JSON.parse(localStorage.getItem('av_' + state.user.email) || '{}');
-  state.balance        = saved.balance        || 0;
-  state.totalDeposited = saved.totalDeposited || 0;
-  state.totalWon       = saved.totalWon       || 0;
-  state.totalWithdrawn = saved.totalWithdrawn || 0;
-  state.referrals      = saved.referrals      || 0;
-  state.refEarned      = saved.refEarned      || 0;
+
+async function loadState() {
+  const { data, error } = await sb.from('players').select('*').eq('email', state.user.email).single();
+  if (data) {
+    state.balance        = data.balance        || 0;
+    state.totalDeposited = data.total_deposited || 0;
+    state.totalWon       = data.total_won       || 0;
+    state.totalWithdrawn = data.total_withdrawn || 0;
+    state.referrals      = data.referrals       || 0;
+    state.refEarned      = data.ref_earned      || 0;
+  } else {
+    // Fallback to localStorage
+    const saved = JSON.parse(localStorage.getItem('av_' + state.user.email) || '{}');
+    state.balance        = saved.balance        || 0;
+    state.totalDeposited = saved.totalDeposited || 0;
+    state.totalWon       = saved.totalWon       || 0;
+    state.totalWithdrawn = saved.totalWithdrawn || 0;
+    state.referrals      = saved.referrals      || 0;
+    state.refEarned      = saved.refEarned      || 0;
+  }
 }
-function saveState() {
+
+async function saveState() {
   if (!state.user) return;
+  // Save to Supabase
+  const { error } = await sb.from('players').upsert({
+    email:            state.user.email,
+    name:             state.user.name,
+    phone:            state.user.phone || '',
+    balance:          state.balance,
+    total_deposited:  state.totalDeposited,
+    total_won:        state.totalWon,
+    total_withdrawn:  state.totalWithdrawn,
+    referrals:        state.referrals,
+    ref_earned:       state.refEarned,
+    ref_code:         state.user.refCode || '',
+    referred_by:      state.user.referredBy || '',
+    updated_at:       new Date().toISOString()
+  }, { onConflict: 'email' });
+  // Also save to localStorage as backup
   localStorage.setItem('av_' + state.user.email, JSON.stringify({
     balance: state.balance, totalDeposited: state.totalDeposited,
     totalWon: state.totalWon, totalWithdrawn: state.totalWithdrawn,
     referrals: state.referrals, refEarned: state.refEarned,
   }));
+}
+
+async function saveNewUser(userData) {
+  await sb.from('players').upsert({
+    email:       userData.email,
+    name:        userData.name,
+    phone:       userData.phone || '',
+    balance:     0,
+    total_deposited: 0,
+    total_won:   0,
+    total_withdrawn: 0,
+    referrals:   0,
+    ref_earned:  0,
+    ref_code:    userData.refCode || '',
+    referred_by: userData.referredBy || '',
+    created_at:  new Date().toISOString(),
+    updated_at:  new Date().toISOString()
+  }, { onConflict: 'email' });
 }
 
 // ══════════════════ UI HELPERS ══════════════════
@@ -1080,7 +1133,8 @@ async function verifyOTP() {
   state.loggedIn = true;
   state.balance = 0; state.totalDeposited = 0; state.totalWon = 0;
   state.totalWithdrawn = 0; state.referrals = 0; state.refEarned = 0;
-  saveState();
+  await saveState();
+  await saveNewUser(users[email]);
   closeModal('signupModal');
   enterGame();
   tgNotify(`🆕 <b>NEW SIGNUP</b>\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\nRef: ${ref || 'none'}\n\n📊 <b>AVIACOM DASHBOARD</b>`);
@@ -1101,7 +1155,6 @@ function doLogin() {
   if (!users[email] || users[email].pass !== pass) { toast('Invalid email or password ❌'); return; }
   state.user = users[email];
   state.loggedIn = true;
-  loadState();
   closeModal('loginModal');
   enterGame();
   toast(`Welcome back, ${state.user.name.split(' ')[0]}! 🚀`);
@@ -1116,9 +1169,10 @@ function doLogout() {
   clearInterval(gameState.flyInterval);
 }
 
-function enterGame() {
+async function enterGame() {
   document.getElementById('heroBtns').style.display = 'none';
   showPage('gamePage');
+  await loadState();
   updateBalDisplay();
   const base = window.location.href.split('?')[0];
   document.getElementById('refLinkBox').textContent = base + '?ref=' + state.user.refCode;
