@@ -1162,6 +1162,7 @@ function doLogin() {
 
 function doLogout() {
   saveState();
+  clearSession();
   state.loggedIn = false; state.user = null;
   showPage('landingPage');
   document.getElementById('heroBtns').style.display = 'flex';
@@ -1170,6 +1171,7 @@ function doLogout() {
 }
 
 async function enterGame() {
+  saveSession();
   document.getElementById('heroBtns').style.display = 'none';
   showPage('gamePage');
   await loadState();
@@ -1681,14 +1683,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (users[sess.email]) {
       state.user = users[sess.email];
       state.loggedIn = true;
-      loadState();
       enterGame();
     }
   }
 });
 
-// Save session on login
-const _origEnter = enterGame;
+function saveSession() {
+  if (state.user) {
+    localStorage.setItem('av_session', JSON.stringify({ email: state.user.email }));
+  }
+}
+
+function clearSession() {
+  localStorage.removeItem('av_session');
+}
 </script>
 </body>
 </html>
